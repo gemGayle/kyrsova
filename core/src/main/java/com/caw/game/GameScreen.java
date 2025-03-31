@@ -1,9 +1,5 @@
 package com.caw.game;
 
-import java.security.Key;
-import java.util.Iterator;
-import java.util.Vector;
-
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Input.Keys;
@@ -11,23 +7,38 @@ import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.Animation;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Polygon;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.*;
 import com.caw.game.GameStart;
+import com.badlogic.gdx.utils.Array;
 
 public class GameScreen implements Screen {
     final GameStart game;
-    private Texture playerSprite;
     private Body playerBody;
     private World world;
     private Box2DDebugRenderer debugRenderer;
     private WorldContactListener contactListener;
     OrthographicCamera camera;
 
+    //animations
+    private Animation<TextureRegion> idleAnimation;
+    private Animation<TextureRegion> runAnimation;
+    private TextureRegion jumpFrame;
+    private TextureRegion fallFrame;
+    private enum State {IDLE, RUNNING, JUMPING, FALLING}
+    private State currentState;
+    private State previousState;
+    private  float stateTime;
 
+    //is right
+    private boolean facingRight = true;
 
+    private static final int FRAME_WIDTH = 32;
+    private static final int FRAME_HEIGHT = 32;
 
     //convert pixels -> meters
     public static final float PPM = 100;
@@ -42,37 +53,59 @@ public class GameScreen implements Screen {
 
     }
 
+
     @Override
     public void render(float delta) {
-        Gdx.gl.glClearColor(0.5f, 0.6f, 1f, 1);
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-
         //input
+        update(delta);
         handleInput(delta);
+        world.step(1/60f,6,2); //physics
 
-        //simulation Box2d
-        world.step(1/60f,6,2);
-
-        //player sprite updatin
-        Vector2 bodyPos = playerBody.getPosition();
-        float playerSpriteX = bodyPos.x * PPM - playerSprite.getWidth()/2;
-        float playerSpriteY = bodyPos.y * PPM - playerSprite.getWidth()/2;
-
-        //updatin camera
+        //camera
         camera.update();
-
-        //plavno z linear interpolation (lerp)
+        Vector2 bodyPos = playerBody.getPosition();
         float lerp = 0.1f;
         camera.position.x += (bodyPos.x * PPM - camera.position.x) * lerp;
         camera.position.y += (bodyPos.y * PPM - camera.position.y) * lerp;
 
 
-        //coordinate system
-        game.batch.setProjectionMatrix(camera.combined);
+        //get texture
+        TextureRegion currentFrame = null;
+        switch (currentState){
+            case JUMPING:
+                currentFrame = jumpFrame;
+                break;
+            case FALLING:
+                currentFrame = fallFrame;
+                break;
+            case RUNNING:
+                currentFrame = runAnimation.getKeyFrame(stateTime, true);
+                break;
+            case IDLE:
+                currentFrame = idleAnimation.getKeyFrame(stateTime, true);
+                break;
+        }
 
+
+        //rozvorot kadry
+        if (!facingRight && !currentFrame.isFlipX()){
+            currentFrame.flip(true, false);
+        } else if (facingRight && currentFrame.isFlipX()) {
+            currentFrame.flip(true, false);
+        }
+
+        //draw
+        Gdx.gl.glClearColor(0.5f, 0.6f, 1f, 1);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        game.batch.setProjectionMatrix(camera.combined);
         game.batch.begin();
-        game.batch.draw(playerSprite, playerSpriteX, playerSpriteY,
-            playerSprite.getWidth(), playerSprite.getHeight());
+
+        float playerDrawX = bodyPos.x * PPM - FRAME_WIDTH/2f;
+        float playerDrawY = bodyPos.y * PPM - FRAME_HEIGHT/2f;
+
+        game.batch.draw(currentFrame, playerDrawX, playerDrawY, FRAME_WIDTH, FRAME_HEIGHT);
+
         game.batch.end();
 
         //debug Box2D
@@ -81,29 +114,66 @@ public class GameScreen implements Screen {
     }
 
     private void handleInput(float dt){
-        float desiredVel = 0;
-        float moveForce = 10f;
-        float maxVel = 1.7f;
+        float maxVel = 3.0f; //max speed
+        float targetVelX = 0; //speed
 
-        if (Gdx.input.isKeyPressed(Keys.A) && playerBody.getLinearVelocity().x > -maxVel) {
-            playerBody.applyLinearImpulse(-moveForce * dt, 0, playerBody.getPosition().x, playerBody.getPosition().y, true);
-        }
-        else if (Gdx.input.isKeyPressed(Keys.D) && playerBody.getLinearVelocity().x < maxVel){
-            playerBody.applyLinearImpulse(moveForce * dt, 0, playerBody.getPosition().x, playerBody.getPosition().y, true);
-        } else {
 
+        if (Gdx.input.isKeyPressed(Keys.A)){
+            targetVelX = -maxVel;
+            facingRight = false;
         }
+
+        if (Gdx.input.isKeyPressed(Keys.D)){
+            targetVelX = maxVel;
+            facingRight = true;
+        }
+
+        if(Gdx.input.isKeyPressed(Keys.A) && Gdx.input.isKeyPressed(Keys.D)){
+            targetVelX = 0; //no move when A and D pressed
+        }
+
+        playerBody.setLinearVelocity(targetVelX, playerBody.getLinearVelocity().y);
 
         if(Gdx.input.isKeyJustPressed(Keys.SPACE) && contactListener.isPlayerOnGround()
             || Gdx.input.isKeyJustPressed(Keys.W) && contactListener.isPlayerOnGround()){
-            float jumpForce = 0.3f;
+            float jumpForce = 0.4f;
             playerBody.applyLinearImpulse(0f, jumpForce, playerBody.getWorldCenter().x, playerBody.getWorldCenter().y, true);
         }
 
     }
 
+    public void update(float dt){
+        currentState = getState();
 
-    private void createPlayerBody(){
+        stateTime = (currentState == previousState) ? stateTime + dt : 0;
+        previousState = currentState;
+
+    }
+    private State getState() {
+        if (!contactListener.isPlayerOnGround()) {
+            if (playerBody.getLinearVelocity().y > 0.1f) {
+                return State.JUMPING;
+            } else if (playerBody.getLinearVelocity().y < 0.1f) {
+                return State.FALLING;
+            } else {
+                if (Math.abs(playerBody.getLinearVelocity().x) > 0.1f) {
+                    return State.RUNNING;
+                } else {
+                    return State.FALLING;
+                }
+            }
+
+        } else {
+            if (Math.abs(playerBody.getLinearVelocity().x) > 0.1f) {
+                return State.RUNNING;
+            } else {
+                return State.IDLE;
+            }
+        }
+    }
+
+
+        private void createPlayerBody(){
         BodyDef bodyDef = new BodyDef();
         bodyDef.type = BodyDef.BodyType.DynamicBody;
 
@@ -112,6 +182,7 @@ public class GameScreen implements Screen {
         float startY = 100f;
         bodyDef.position.set(startX/PPM, startY/PPM);
         bodyDef.fixedRotation = true;
+        bodyDef.linearDamping = 2.0f;
 
         playerBody = world.createBody(bodyDef);
 
@@ -161,9 +232,38 @@ public class GameScreen implements Screen {
         contactListener = new WorldContactListener();
         world.setContactListener(contactListener);
 
+        //animation for character
+        Texture idleSheet = new Texture(Gdx.files.internal("assets\\player_idle.png"));
+        Texture runSheet = new Texture(Gdx.files.internal("assets\\player_run.png"));
+        //jump - fall
+        Texture jumpSheet = new Texture(Gdx.files.internal("assets\\player_jump.png"));
+        Texture fallSheet = new Texture(Gdx.files.internal("assets\\player_fall.png"));
 
-        playerSprite = new Texture(Gdx.files.internal("C:\\Users\\User\\Desktop\\study\\chornovik\\assets\\PlayerIdle.png"));
+        //IDLE ANIM
+        int idleFrameCount = 4;
+        TextureRegion[][] tmpIdle = TextureRegion.split(idleSheet, FRAME_WIDTH, FRAME_HEIGHT);
+        Array<TextureRegion> idleFrames = new Array<>(idleFrameCount);
+        for(int i = 0; i < idleFrameCount; i++){
+            idleFrames.add(tmpIdle[0][i]);
+        }
+        idleAnimation = new Animation<>(0.15f, idleFrames, Animation.PlayMode.LOOP);
 
+        //RUN ANIM
+        int runFrameCount = 8;
+        TextureRegion[][] tmpRun = TextureRegion.split(runSheet, FRAME_WIDTH, FRAME_HEIGHT);
+        Array<TextureRegion> rumFrames = new Array<>(runFrameCount);
+        for (int i = 0; i < runFrameCount; i++){
+            rumFrames.add(tmpRun[0][i]);
+        }
+        runAnimation = new Animation<>(0.1f, rumFrames, Animation.PlayMode.LOOP);
+
+        //JUMP-FALL ANIM
+        jumpFrame = new TextureRegion(jumpSheet, 0,0, FRAME_WIDTH, FRAME_HEIGHT);
+        fallFrame = new TextureRegion(jumpSheet, 0,0, FRAME_WIDTH, FRAME_HEIGHT);
+
+        stateTime = 0f;
+
+        currentState = State.IDLE;
         createPlayerBody();
         createGround();
     }
@@ -191,7 +291,17 @@ public class GameScreen implements Screen {
         world.dispose();
         debugRenderer.dispose();
 
-        playerSprite.dispose();
+        if (idleAnimation != null && idleAnimation.getKeyFrames().length > 0){
+            Texture texture = ((TextureRegion)idleAnimation.getKeyFrames()[0]).getTexture();
+            if (texture != null){
+                texture.dispose();
+            }
+        }
+        if (runAnimation != null && runAnimation.getKeyFrames().length > 0){
+            ((TextureRegion)runAnimation.getKeyFrames()[0]).getTexture().dispose();
+        }
+        if (jumpFrame != null) jumpFrame.getTexture().dispose();
+        if (fallFrame != null) fallFrame.getTexture().dispose();
     }
 
 }
