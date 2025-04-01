@@ -1,29 +1,41 @@
 package com.caw.game;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.physics.box2d.ContactListener;
 import com.badlogic.gdx.physics.box2d.Contact;
 import com.badlogic.gdx.physics.box2d.ContactImpulse;
 import com.badlogic.gdx.physics.box2d.Fixture;
 import com.badlogic.gdx.physics.box2d.Manifold;
 
-import javax.swing.*;
 
 public class WorldContactListener implements ContactListener {
-    private int groundContacts = 0;
+    private int footContacts = 0;
+    private boolean playerIsOnGround = false;
+
+    private boolean isFeetContactingGround(Fixture fixA, Fixture fixB) {
+        Object dataA = fixA.getUserData();
+        Object dataB = fixB.getUserData();
+
+        if (dataA == null || dataB == null || !(dataA instanceof String) || !(dataB instanceof String)) {
+            return false;
+        }
+
+        String strA = (String) dataA;
+        String strB = (String) dataB;
+
+        return (strA.equals("playerFeet") && strB.equals("ground")) ||
+            (strA.equals("ground") && strB.equals("playerFeet"));
+    }
 
     @Override
     public void beginContact(Contact contact) {
         Fixture fixA = contact.getFixtureA();
         Fixture fixB = contact.getFixtureB();
 
-        boolean isPlayerA = fixA.getBody().getUserData() != null && fixA.getBody().getUserData().equals("player");
-        boolean isGroundA = fixA.getBody().getUserData() != null && fixA.getBody().getUserData().equals("ground");
-        boolean isPlayerB = fixB.getBody().getUserData() != null && fixB.getBody().getUserData().equals("player");
-        boolean isGroundB = fixB.getBody().getUserData() != null && fixB.getBody().getUserData().equals("ground");
-
-        if ((isPlayerA && isGroundB) || (isPlayerB && isGroundA)){
-            groundContacts++;
-            System.out.println("player touched the ground: " + groundContacts);
+        if (isFeetContactingGround(fixA, fixB)) {
+            footContacts++;
+            playerIsOnGround = true;
+            Gdx.app.log("CONTACT", "Player feet touching ground. Contacts: " + footContacts); // Логування LibGDX
         }
 
     }
@@ -33,30 +45,32 @@ public class WorldContactListener implements ContactListener {
         Fixture fixA = contact.getFixtureA();
         Fixture fixB = contact.getFixtureB();
 
-        boolean isPlayerA = fixA.getBody().getUserData() != null && fixA.getBody().getUserData().equals("player");
-        boolean isGroundA = fixA.getBody().getUserData() != null && fixA.getBody().getUserData().equals("ground");
-        boolean isPlayerB = fixB.getBody().getUserData() != null && fixB.getBody().getUserData().equals("player");
-        boolean isGroundB = fixB.getBody().getUserData() != null && fixB.getBody().getUserData().equals("ground");
-
-        if ((isPlayerA && isGroundB) || (isPlayerB && isGroundA)){
-            if (groundContacts > 0){
-                groundContacts--;
+        if (isFeetContactingGround(fixA, fixB)) {
+            if (footContacts > 0) {
+                footContacts--;
             }
-            System.out.println("player left the ground: " + groundContacts);
+            if (footContacts == 0) {
+                playerIsOnGround = false;
+                Gdx.app.log("CONTACT", "Player feet left ground. Contacts: " + footContacts);
+            } else {
+                Gdx.app.log("CONTACT", "Feet contact ended, but others remain. Contacts: " + footContacts);
+            }
         }
-    }
 
-    @Override
-    public void preSolve(Contact contact, Manifold manifold) {
 
     }
 
     @Override
-    public void postSolve(Contact contact, ContactImpulse contactImpulse) {
+    public void preSolve(Contact contact, Manifold oldManifold) {
 
     }
 
-    public boolean isPlayerOnGround(){
-        return groundContacts > 0;
+    @Override
+    public void postSolve(Contact contact, ContactImpulse impulse) {
+
+    }
+
+    public boolean isPlayerOnGround() {
+        return playerIsOnGround;
     }
 }
