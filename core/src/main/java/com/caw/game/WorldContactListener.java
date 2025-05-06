@@ -7,24 +7,24 @@ import com.badlogic.gdx.physics.box2d.ContactImpulse;
 import com.badlogic.gdx.physics.box2d.Fixture;
 import com.badlogic.gdx.physics.box2d.Manifold;
 
-
 public class WorldContactListener implements ContactListener {
     private int footContacts = 0;
     private boolean playerIsOnGround = false;
+    private GameScreen gameScreen;
 
-    private boolean isFeetContactingGround(Fixture fixA, Fixture fixB) {
-        Object dataA = fixA.getUserData();
-        Object dataB = fixB.getUserData();
+    // Конструктор для передачі GameScreen
+    public WorldContactListener(GameScreen gameScreen) {
+        this.gameScreen = gameScreen;
+    }
 
-        if (dataA == null || dataB == null || !(dataA instanceof String) || !(dataB instanceof String)) {
-            return false;
-        }
+    public WorldContactListener() {
+        this.gameScreen = null; // Або кидати виняток, якщо GameScreen обов'язковий
+        Gdx.app.error("WorldContactListener", "Default constructor called, GameScreen will be null!");
+    }
 
-        String strA = (String) dataA;
-        String strB = (String) dataB;
 
-        return (strA.equals("playerFeet") && strB.equals("ground")) ||
-            (strA.equals("ground") && strB.equals("playerFeet"));
+    private boolean isType(Fixture fixture, String type) {
+        return fixture != null && fixture.getUserData() != null && fixture.getUserData().equals(type);
     }
 
     @Override
@@ -32,12 +32,45 @@ public class WorldContactListener implements ContactListener {
         Fixture fixA = contact.getFixtureA();
         Fixture fixB = contact.getFixtureB();
 
-        if (isFeetContactingGround(fixA, fixB)) {
+        // Перевірка контакту ніг гравця з землею
+        if ((isType(fixA, "playerFeet") && isType(fixB, "ground")) ||
+            (isType(fixA, "ground") && isType(fixB, "playerFeet"))) {
             footContacts++;
             playerIsOnGround = true;
-            Gdx.app.log("CONTACT", "Player feet touching ground. Contacts: " + footContacts); // Логування LibGDX
+            Gdx.app.log("CONTACT", "Player feet touching ground. Contacts: " + footContacts);
         }
 
+        // Перевірка контакту з монетою
+        Fixture playerFixture = null;
+        Fixture coinFixture = null;
+
+        if (isType(fixA, "player") && isType(fixB, "coin")) {
+            playerFixture = fixA;
+            coinFixture = fixB;
+        } else if (isType(fixA, "coin") && isType(fixB, "player")) {
+            playerFixture = fixB;
+            coinFixture = fixA;
+        }
+
+        if (playerFixture != null && coinFixture != null) {
+            Gdx.app.log("CONTACT", "Player touched a coin!");
+            if (gameScreen != null) {
+                gameScreen.collectCoin(); // Збільшуємо рахунок
+                gameScreen.scheduleBodyForRemoval(coinFixture.getBody());
+            } else {
+                Gdx.app.error("CONTACT_LISTENER", "GameScreen is null, cannot process coin collection properly.");
+            }
+        }
+
+        //Перевірка зіткення з ворогом
+        if ((isType(fixA, "player") && isType(fixB, "enemy")) ||
+            (isType(fixA, "enemy") && isType(fixB, "player"))) {
+
+            Gdx.app.log("CONTACT", "Player hit an enemy!");
+            if (gameScreen != null) {
+                gameScreen.requestPlayerReset();
+            }
+        }
     }
 
     @Override
@@ -45,30 +78,36 @@ public class WorldContactListener implements ContactListener {
         Fixture fixA = contact.getFixtureA();
         Fixture fixB = contact.getFixtureB();
 
-        if (isFeetContactingGround(fixA, fixB)) {
+        if ((isType(fixA, "playerFeet") && isType(fixB, "ground")) ||
+            (isType(fixA, "ground") && isType(fixB, "playerFeet"))) {
             if (footContacts > 0) {
                 footContacts--;
             }
             if (footContacts == 0) {
                 playerIsOnGround = false;
-                Gdx.app.log("CONTACT", "Player feet left ground. Contacts: " + footContacts);
-            } else {
-                Gdx.app.log("CONTACT", "Feet contact ended, but others remain. Contacts: " + footContacts);
             }
+            // Gdx.app.log("CONTACT", "Player feet contact ended. Contacts: " + footContacts + ", onGround: " + playerIsOnGround);
+            // Логування тут може бути надто частим, краще прибрати або зменшити
         }
-
-
     }
 
     @Override
     public void preSolve(Contact contact, Manifold oldManifold) {
+        Fixture fixA = contact.getFixtureA();
+        Fixture fixB = contact.getFixtureB();
 
+        // Якщо гравець (не сенсор ніг) контактує з монетою, вимикаємо контакт,
+        // щоб він не впливав на фізику гравця, оскільки монета і так сенсор.
+        // Це може бути надлишковим, оскільки монета вже є сенсором,
+        // але для певності можна залишити.
+        if ((isType(fixA, "player") && isType(fixB, "coin")) ||
+            (isType(fixA, "coin") && isType(fixB, "player"))) {
+            contact.setEnabled(false);
+        }
     }
 
     @Override
-    public void postSolve(Contact contact, ContactImpulse impulse) {
-
-    }
+    public void postSolve(Contact contact, ContactImpulse impulse) {}
 
     public boolean isPlayerOnGround() {
         return playerIsOnGround;
