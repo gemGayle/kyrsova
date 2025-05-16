@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="120" height="30" tilewidth="32" tileheight="32" infinite="0" nextlayerid="7" nextobjectid="32">
+<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="120" height="30" tilewidth="32" tileheight="32" infinite="0" nextlayerid="8" nextobjectid="38">
  <tileset firstgid="1" source="test_map_tiles.tsx"/>
  <layer id="1" name="foreground" width="120" height="30">
   <data encoding="csv">
@@ -100,5 +100,18 @@
    </properties>
    <point/>
   </object>
+  <object id="36" x="560.5" y="872">
+   <properties>
+    <property name="type" value="shooting_enemy"/>
+   </properties>
+   <point/>
+  </object>
+  <object id="37" x="959.5" y="676">
+   <properties>
+    <property name="type" value="shooting_enemy"/>
+   </properties>
+   <point/>
+  </object>
  </objectgroup>
+ <objectgroup id="7" name="ShootingEnemies"/>
 </map>
