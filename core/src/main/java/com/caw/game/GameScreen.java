@@ -3,6 +3,8 @@ package com.caw.game;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input.Keys;
 import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.assets.AssetManager;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
@@ -15,18 +17,28 @@ import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.*;
+import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.physics.box2d.Fixture;
+import com.badlogic.gdx.audio.Sound;
+import com.badlogic.gdx.scenes.scene2d.ui.Skin;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
+import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.Input;
 
 public class GameScreen implements Screen {
     final GameStart game;
+    private AssetManager assetManager;
     private World world;
     private Box2DDebugRenderer debugRenderer;
     private WorldContactListener contactListener;
 
     //camera
-    public static final float WORLD_WIDTH_PIXELS = 800f;
-    public static final float WORLD_HEIGHT_PIXELS = 480f;
+    public static final float WORLD_WIDTH_PIXELS = 320f;
+    public static final float WORLD_HEIGHT_PIXELS = 240f;
     private OrthographicCamera gameCamera;
     private OrthographicCamera hudCamera;
     private OrthographicCamera debugCamera;
@@ -45,13 +57,21 @@ public class GameScreen implements Screen {
     private Texture playerFallSheetTexture;
     private Vector2 initialPlayerSpawnPointPixels;
 
-    public static final float PPM = 100;
+    public static final float PPM = 40;
 
     //coin
     private Texture coinTexture;
-    private static final float COIN_SIZE = 16f;
+    private static final float COIN_SIZE = 8f;
     private Array<Body> coinBodies;
     private Array<Body> bodiesToRemove;
+    private Array<Fixture> fixturesToMakeSensor;
+
+    //anim coin
+    private Texture coinAnimationSheetTexture;
+    private Array<Coin> animatedCoins;
+    private Texture enemyPatrolSheetTexture;
+    private Texture shootingEnemySheetTexture;
+
 
     private int score = 0;
     private ShapeRenderer shapeRenderer;
@@ -63,31 +83,47 @@ public class GameScreen implements Screen {
     private Texture enemyTexture;
     private Texture shootingEnemyTexture;
     private Texture projectileTexture;
-    private static final float ENEMY_VISUAL_WIDTH = 32f;
-    private static final float ENEMY_VISUAL_HEIGHT = 32f;
+    private static final float ENEMY_VISUAL_WIDTH = 16f;
+    private static final float ENEMY_VISUAL_HEIGHT = 16f;
 
     //shooting enemy
-    private static final float SHOOTING_ENEMY_VISUAL_WIDTH = 32f;
-    private static final float SHOOTING_ENEMY_VISUAL_HEIGHT = 32f;
+    private static final float SHOOTING_ENEMY_VISUAL_WIDTH = 16f;
+    private static final float SHOOTING_ENEMY_VISUAL_HEIGHT = 16f;
 
     //key - door
     private Texture keyTexture;
     private Texture doorClosedTexture;
+    private Texture doorOpenTexture;
     public Body keyBody;
     public boolean playerHasKey = false;
     private Vector2 keyPositionPixels;
     private Array<DoorData> doors;
-    private Texture doorOpenTexture;
 
     private boolean playerNeedsPositionReset = false; // reset pos WO death
 
-    public GameScreen(final GameStart gam) {
-        this.game = gam;
-        gameCamera = new OrthographicCamera();
+    //sounds
+    private Sound walkSound;
+    private Sound jumpSound;
+    private Sound playerHurtSound;
+    private Sound playerDeathSound;
+    private Sound enemyDeathSound;
+    private Sound shootSound;
+    private Sound coinPickupSound;
+    private Sound keyPickupSound;
 
+    // UI-UX
+    private boolean isPaused = false;
+    private Stage pauseGuiStage;
+    private Skin uiSkin;
+    private ShapeRenderer dimRenderer;
+
+    public GameScreen(final GameStart game) {
+        this.game = game;
+        gameCamera = new OrthographicCamera();
         hudCamera = new OrthographicCamera();
-        hudCamera.setToOrtho(false, WORLD_WIDTH_PIXELS, WORLD_HEIGHT_PIXELS);
+//        hudCamera.setToOrtho(false, WORLD_WIDTH_PIXELS, WORLD_HEIGHT_PIXELS);
     }
+
 
     @Override
     public void show() {
@@ -96,65 +132,209 @@ public class GameScreen implements Screen {
         gameViewport = new com.badlogic.gdx.utils.viewport.ExtendViewport(WORLD_WIDTH_PIXELS, WORLD_HEIGHT_PIXELS, gameCamera);
         hudViewport = new com.badlogic.gdx.utils.viewport.ExtendViewport(WORLD_WIDTH_PIXELS, WORLD_HEIGHT_PIXELS, hudCamera);
 
-
         gameViewport.apply();
         hudViewport.apply();
-
-//        gameCamera.setToOrtho(false, 800, 480);
-//        hudCamera.setToOrtho(false, 800, 480);
 
         world = new World(new Vector2(0, -10f), true);
         debugRenderer = new Box2DDebugRenderer();
         contactListener = new WorldContactListener(this);
         world.setContactListener(contactListener);
 
-        map = new TmxMapLoader().load("assets/test2_map.tmx");
+        map = new TmxMapLoader().load("assets/lvl1_final.tmx");
         mapRenderer = new OrthogonalTiledMapRenderer(map, 1); // map render
 
         // player textures
-        playerIdleSheetTexture = new Texture(Gdx.files.internal("assets/player_idle.png"));
-        playerRunSheetTexture = new Texture(Gdx.files.internal("assets/player_run.png"));
+        playerIdleSheetTexture = new Texture(Gdx.files.internal("assets/skeleton_idle.png"));
+        playerRunSheetTexture = new Texture(Gdx.files.internal("assets/skeleton_run.png"));
         playerJumpSheetTexture = new Texture(Gdx.files.internal("assets/player_jump.png"));
         playerFallSheetTexture = new Texture(Gdx.files.internal("assets/player_fall.png"));
 
-        //collectibles
-        coinTexture = new Texture(Gdx.files.internal("assets/coin.png"));
+        coinAnimationSheetTexture = new Texture(Gdx.files.internal("assets/coin_animation_sheet.png"));
+
         keyTexture = new Texture(Gdx.files.internal("assets/key.png"));
         doorClosedTexture = new Texture(Gdx.files.internal("assets/door_closed.png"));
         doorOpenTexture = new Texture(Gdx.files.internal("assets/door_open.png"));
 
         //enemy
+        enemyPatrolSheetTexture = new Texture(Gdx.files.internal("assets/enemy_animation_sheet.png"));
+        shootingEnemySheetTexture = new Texture(Gdx.files.internal("assets/shooting_enemy_animation_sheet.png"));
+
         enemyTexture = new Texture(Gdx.files.internal("assets/enemy.png"));
         shootingEnemyTexture = new Texture(Gdx.files.internal("assets/shooting_enemy.png"));
         projectileTexture = new Texture(Gdx.files.internal("assets/projectile.png"));
 
+        //ui
+        uiSkin = new Skin(Gdx.files.internal("assets/ui/uiskin.json"));
+
+        try {
+            uiSkin = new Skin(Gdx.files.internal("assets/ui/uiskin.json"));
+            if (game.defaultFont != null) {
+                if (uiSkin.has("default", TextButton.TextButtonStyle.class)) {
+                    TextButton.TextButtonStyle buttonStyle = uiSkin.get("default", TextButton.TextButtonStyle.class);
+                    buttonStyle.font = game.hudScoreFont;
+                    buttonStyle.fontColor = Color.LIGHT_GRAY;
+                }
+            } else {
+                Gdx.app.log("GameScreen", "game.defaultFont is null, pause menu UI font not changed.");
+            }
+        } catch (Exception e) {
+            Gdx.app.error("GameScreen", "Could not load uiSkin for pause menu", e);
+            uiSkin = new Skin();
+        }
+
+        //sounds
+        try {
+            walkSound = Gdx.audio.newSound(Gdx.files.internal("assets/sounds/walk.wav"));
+            jumpSound = Gdx.audio.newSound(Gdx.files.internal("assets/sounds/jump.wav"));
+            playerHurtSound = Gdx.audio.newSound(Gdx.files.internal("assets/sounds/player_hurt.wav"));
+            playerDeathSound = Gdx.audio.newSound(Gdx.files.internal("assets/sounds/player_death.wav"));
+            enemyDeathSound = Gdx.audio.newSound(Gdx.files.internal("assets/sounds/enemy_death.wav"));
+            shootSound = Gdx.audio.newSound(Gdx.files.internal("assets/sounds/shoot.wav"));
+            coinPickupSound = Gdx.audio.newSound(Gdx.files.internal("assets/sounds/coin.wav"));
+            keyPickupSound = Gdx.audio.newSound(Gdx.files.internal("assets/sounds/key.wav"));
+        } catch (Exception e) {
+            Gdx.app.error("SoundLoader", "Error loading sounds", e);
+            walkSound = jumpSound = playerHurtSound = playerDeathSound = enemyDeathSound = shootSound = coinPickupSound = keyPickupSound = null;
+        }
+
+        //ui
+        pauseGuiStage = new Stage(hudViewport); //pause
+        dimRenderer = new ShapeRenderer();
+
         shapeRenderer = new ShapeRenderer();
-        coinBodies = new Array<>();
-        bodiesToRemove = new Array<>();
+        animatedCoins = new Array<>();
         enemies = new Array<>();
         shootingEnemies = new Array<>();
         projectiles = new Array<>();
         doors = new Array<>();
+        bodiesToRemove = new Array<>();
+        fixturesToMakeSensor = new Array<>();
 
         score = 0;
         playerHasKey = false;
 
         findInitialPlayerSpawnPoint();
-        player = new Player(world, contactListener, initialPlayerSpawnPointPixels,
-            playerIdleSheetTexture, playerRunSheetTexture, playerJumpSheetTexture, playerFallSheetTexture);
+        player = new Player(world,
+            contactListener,
+            initialPlayerSpawnPointPixels,
+            playerIdleSheetTexture,
+            playerRunSheetTexture,
+            playerJumpSheetTexture,
+            playerFallSheetTexture,
+            this);
+
         contactListener.setPlayer(player); // player go to contactListener
 
         createPhysicsFromMap();
         createCollectibles();
         createDoorsFromMap();
         createEnemiesFromMap();
-
-//        createShootingEnemies();
+        setupPauseUI();
 
         Gdx.app.log("GameScreen", "show() finished initialization");
     }
 
-    private void findInitialPlayerSpawnPoint() {
+    private void setupPauseUI() {
+        Table pauseTable = new Table();
+        pauseTable.setFillParent(true);
+        pauseTable.center();
+        // pauseTable.setDebug(true);
+
+        float buttonWidth = 130f;
+        float buttonHeight = 20f;
+        float padValue = 10f;
+
+        TextButton resumeButton = new TextButton("Resume Game", uiSkin);
+        resumeButton.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                togglePause();
+            }
+        });
+
+        TextButton restartButton = new TextButton("Restart Level", uiSkin);
+        restartButton.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                togglePause(); //FIRST unpause!!!
+                restartLevel();
+            }
+        });
+
+        TextButton mainMenuButton = new TextButton("Main Menu", uiSkin);
+        mainMenuButton.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                togglePause(); //unpause
+                game.setScreen(new MainMenuScreen(game));
+            }
+        });
+
+        pauseTable.add(resumeButton).width(buttonWidth).height(buttonHeight).padBottom(padValue).row();
+        pauseTable.add(restartButton).width(buttonWidth).height(buttonHeight).padBottom(padValue).row();
+        pauseTable.add(mainMenuButton).width(buttonWidth).height(buttonHeight).row();
+
+        pauseGuiStage.addActor(pauseTable);
+    }
+
+    private void togglePause() {
+        isPaused = !isPaused;
+        if (isPaused) {
+            Gdx.input.setInputProcessor(pauseGuiStage);
+            Gdx.app.log("GameScreen", "Game Paused");
+        } else {
+            Gdx.input.setInputProcessor(null);
+            Gdx.app.log("GameScreen", "Game Resumed");
+        }
+    }
+
+    private void playSound(Sound sound) {
+        if (sound != null) {
+            sound.play(0.5f);
+        }
+    }
+    private void playSound(Sound sound, float relativeVolume) {
+        if (sound != null && game != null && game.prefs != null) {
+            float masterVolume = game.prefs.getFloat("masterVolume", 0.5f);
+            sound.play(masterVolume * relativeVolume);
+        } else if (sound != null) {
+            sound.play(0.5f * relativeVolume);
+        }
+    }
+
+    public void playPlayerWalkSound() { playSound(walkSound, 0.2f); }
+    public void playPlayerJumpSound() { playSound(jumpSound, 0.4f); }
+    public void playPlayerHurtSound() { playSound(playerHurtSound, 0.5f); }
+    public void playPlayerDeathSound() { playSound(playerDeathSound, 0.7f); }
+    public void playEnemyDeathSound() { playSound(enemyDeathSound, 0.3f); }
+    public void playShootSound() { playSound(shootSound, 0.4f); }
+    public void playCoinPickupSound() { playSound(coinPickupSound, 0.3f); }
+    public void playKeyPickupSound() { playSound(keyPickupSound); }
+
+    public void scheduleFixtureToMakeSensor(Fixture fixture) {
+        if (fixture != null && !fixturesToMakeSensor.contains(fixture, true)) {
+            fixturesToMakeSensor.add(fixture);
+        }
+    }
+
+    private void processPendingFixtureChanges() {
+        if (world == null || world.isLocked() || fixturesToMakeSensor.isEmpty()) {
+            return;
+        }
+
+        for (Fixture fixture : fixturesToMakeSensor) {
+            if (fixture != null && fixture.getBody().isActive()) {
+                fixture.setSensor(true);
+                Object bodyUserData = fixture.getBody().getUserData();
+                String bodyInfo = (bodyUserData instanceof DoorData) ? "Door" : String.valueOf(bodyUserData);
+                Gdx.app.log("PHYSICS_CHANGE", "Fixture on body (" + bodyInfo + ") made sensor.");
+            }
+        }
+        fixturesToMakeSensor.clear();
+    }
+
+
+        private void findInitialPlayerSpawnPoint() {
         initialPlayerSpawnPointPixels = new Vector2(gameCamera.viewportWidth / 2f, gameCamera.viewportHeight / 2f); // Default
         MapLayer spawnLayer = map.getLayers().get("SpawnPoints");
         if (spawnLayer != null) {
@@ -182,57 +362,64 @@ public class GameScreen implements Screen {
         // dealayed actions
         handlePendingActions();
 
-        // game logic
-        if (player != null && !player.isDead()) {
-            player.handleInput(delta); // player input
-            player.update(delta);      // update
-        } else if (player != null && player.isDead()) {
-            // "Game Over"
-            if (Gdx.input.isKeyJustPressed(Keys.R)) {
-                restartLevel();
-            }
-            if (Gdx.input.isKeyJustPressed(Keys.M)) {
-                game.setScreen(new MainMenuScreen(game));
-            }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            togglePause();
         }
 
-        for (Enemy enemy : enemies) {
-            enemy.update(delta);
-        }
-
-        //shooting enemy
-        for (ShootingEnemy sEnemy : shootingEnemies) {
-            sEnemy.update(delta, player);
-        }
-
-        //projectile update
-        for (int i = projectiles.size - 1; i >= 0; i--) {
-            Projectile p = projectiles.get(i);
-            p.update(delta);
-            if (p.isScheduledForRemoval()) {
-                if (p.getBody() != null && p.getBody().isActive()) {
-                    scheduleBodyForRemoval(p.getBody());
+        if (!isPaused) {
+            // game logic
+            if (player != null && !player.isDead()) {
+                player.handleInput(delta); // player input
+                player.update(delta);      // update
+            } else if (player != null && player.isDead()) {
+                // "Game Over"
+                if (Gdx.input.isKeyJustPressed(Keys.R)) {
+                    restartLevel();
                 }
-                projectiles.removeIndex(i);
+                if (Gdx.input.isKeyJustPressed(Keys.M)) {
+                    game.setScreen(new MainMenuScreen(game));
+                }
             }
-        }
 
-        //doors
-        for (DoorData door : doors) {
-            if (door.isLocked && playerHasKey && !door.isOpen) {
-                door.isOpen = true;
+            for (Enemy enemy : enemies) {
+                enemy.update(delta);
             }
-        }
 
-        world.step(1 / 60f, 6, 2);
-        removeScheduledBodies(); // remove bodies after world step
+            //shooting enemy
+            for (ShootingEnemy sEnemy : shootingEnemies) {
+                sEnemy.update(delta, player);
+            }
+
+            //coins
+            for (Coin coin : animatedCoins) {
+                coin.update(delta);
+            }
+
+            //projectile update
+            for (int i = projectiles.size - 1; i >= 0; i--) {
+                Projectile p = projectiles.get(i);
+                p.update(delta);
+                if (p.isScheduledForRemoval()) {
+                    if (p.getBody() != null && p.getBody().isActive()) {
+                        scheduleBodyForRemoval(p.getBody());
+                    }
+                    projectiles.removeIndex(i);
+                }
+            }
+
+            world.step(1 / 60f, 6, 2);
+            removeScheduledBodies(); // remove bodies after world step
+            processPendingFixtureChanges();
+        } else {
+            pauseGuiStage.act(Math.min(Gdx.graphics.getDeltaTime(), 1 / 30f));
+        }
 
         // screen clear (BG)
-        Gdx.gl.glClearColor(0.5f, 0.6f, 1f, 1);
+        Gdx.gl.glClearColor(0f, 0f, 0f, 1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         // cam update
-        if (player != null && player.getBody() != null) {
+        if (player != null && player.getBody() != null && !isPaused) {
             Vector2 playerPosMeters = player.getPositionMeters();
             float lerp = 0.1f; // smooth camera
             gameCamera.position.x += (playerPosMeters.x * PPM - gameCamera.position.x) * lerp;
@@ -249,26 +436,25 @@ public class GameScreen implements Screen {
         game.batch.setProjectionMatrix(gameCamera.combined);
         game.batch.begin();
 
-        // coins
-        if (coinTexture != null) {
-            for (Body coinBody : coinBodies) {
-                if (coinBody.isActive()) { // check if body still active
-                    float coinX = coinBody.getPosition().x * PPM - COIN_SIZE / 2f;
-                    float coinY = coinBody.getPosition().y * PPM - COIN_SIZE / 2f;
-                    game.batch.draw(coinTexture, coinX, coinY, COIN_SIZE, COIN_SIZE);
-                }
-            }
-        }
+        for (Coin coin : animatedCoins) coin.render(game.batch);
+
+        for (Enemy enemy : enemies) enemy.draw(game.batch);
+
+        for (ShootingEnemy sEnemy : shootingEnemies) sEnemy.draw(game.batch);
+
+        for (Projectile projectile : projectiles) projectile.render(game.batch);
+
+        if (player != null) player.render(game.batch);
+
         //key
         if (keyBody != null && keyBody.isActive() && keyTexture != null) {
-            float keyDrawWidth = 24f;
-            float keyDrawHeight = 24f;
+            float keyDrawWidth = 8f;
+            float keyDrawHeight = 8f;
             game.batch.draw(keyTexture,
                 keyBody.getPosition().x * PPM - keyDrawWidth / 2f,
                 keyBody.getPosition().y * PPM - keyDrawHeight / 2f,
                 keyDrawWidth, keyDrawHeight);
         }
-
         //doors
         for (DoorData door : doors) {
             Texture doorTextureToDraw = (door.isOpen || !door.isLocked) ? (doorOpenTexture != null ? doorOpenTexture : doorClosedTexture) : doorClosedTexture;
@@ -278,29 +464,24 @@ public class GameScreen implements Screen {
                     door.boundsPixels.width, door.boundsPixels.height);
             }
         }
-
-        // enemies
-        for (Enemy enemy : enemies) {
-            enemy.draw(game.batch);
-        }
-
-        for (ShootingEnemy sEnemy : shootingEnemies) {
-            sEnemy.draw(game.batch);
-        }
-
-        for (Projectile projectile : projectiles) {
-            projectile.render(game.batch);
-        }
-
-        // player
-        if (player != null) {
-            player.render(game.batch);
-        }
         game.batch.end();
 
         // debug info Box2d (HITBOXES)
-        if (debugRenderer != null) {
-            debugRenderer.render(world, gameCamera.combined.cpy().scl(PPM));
+//        if (debugRenderer != null) {
+//            debugRenderer.render(world, gameCamera.combined.cpy().scl(PPM));
+//        }
+
+        if (isPaused) {
+            Gdx.gl.glEnable(GL20.GL_BLEND);
+            Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+            dimRenderer.setProjectionMatrix(hudCamera.combined);
+            dimRenderer.begin(ShapeRenderer.ShapeType.Filled);
+            dimRenderer.setColor(0f, 0f, 0f, 0.5f);
+            dimRenderer.rect(0, 0, hudViewport.getWorldWidth(), hudViewport.getWorldHeight());
+            dimRenderer.end();
+            Gdx.gl.glDisable(GL20.GL_BLEND);
+
+            pauseGuiStage.draw();
         }
 
         // HUD
@@ -308,50 +489,62 @@ public class GameScreen implements Screen {
 
         // Health Bar
         if (player != null && shapeRenderer != null) {
-            float healthBarWidth = 200f;
-            float healthBarHeight = 20f;
-            float healthBarX = 20f;
-            float healthBarY = hudCamera.viewportHeight - healthBarHeight - 20f;
+            float healthBarWidth = 80f;
+            float healthBarHeight = 10f;
+            float healthBarX = 10f;
+            float healthBarY = hudCamera.viewportHeight - healthBarHeight - 10f;
 
             shapeRenderer.setProjectionMatrix(hudCamera.combined);
             shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-            shapeRenderer.setColor(0.3f, 0.3f, 0.3f, 1f); // Фон
+            shapeRenderer.setColor(0.3f, 0.3f, 0.3f, 1f); //hp bg
             shapeRenderer.rect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
 
             float currentHealthWidth = healthBarWidth * (player.getCurrentHealth() / player.getMaxHealth());
             if (currentHealthWidth < 0) currentHealthWidth = 0;
-            shapeRenderer.setColor(0f, 1f, 0f, 1f); // Сама смужка
+            shapeRenderer.setColor(1f, 0f, 0.25f, 1f); //hp
             shapeRenderer.rect(healthBarX, healthBarY, currentHealthWidth, healthBarHeight);
             shapeRenderer.end();
         }
 
-        //key hud
-        if (playerHasKey && keyTexture != null) {
-            game.batch.draw(keyTexture, hudViewport.getWorldWidth() - 50f, hudViewport.getWorldHeight() - 50f, 32f, 32f);
-        }
-
-        // Текст HUD (рахунок, Game Over)
+        // text HUD
         game.batch.setProjectionMatrix(hudCamera.combined);
         game.batch.begin();
-        float scorePadding = 20f;
-        float healthBarHeightForText = 20f;
-        game.font.draw(game.batch, "Score: " + score, scorePadding, hudCamera.viewportHeight - scorePadding - healthBarHeightForText - 10f);
 
-        if (player != null && player.isDead()) {
-            game.font.getData().setScale(2);
-            String gameOverText = "GAME OVER";
-            com.badlogic.gdx.graphics.g2d.GlyphLayout layoutGO = new com.badlogic.gdx.graphics.g2d.GlyphLayout(game.font, gameOverText);
-            game.font.draw(game.batch, gameOverText, (hudCamera.viewportWidth - layoutGO.width) / 2, hudCamera.viewportHeight / 2 + layoutGO.height + 30);
+        float hudPadding = 10f;
+        float actualHealthBarHeight = 10f;
+        game.hudScoreFont.getData().setScale(0.5f);
 
-            game.font.getData().setScale(1);
-            String restartText = "Press 'R' to Restart";
-            com.badlogic.gdx.graphics.g2d.GlyphLayout layoutR = new com.badlogic.gdx.graphics.g2d.GlyphLayout(game.font, restartText);
-            game.font.draw(game.batch, restartText, (hudCamera.viewportWidth - layoutR.width) / 2, hudCamera.viewportHeight / 2 - 10);
+        game.hudScoreFont.getCapHeight();   //High letters
+        game.hudScoreFont.getLineHeight();  //else letters
 
-            String menuText = "Press 'M' for Main Menu";
-            com.badlogic.gdx.graphics.g2d.GlyphLayout layoutM = new com.badlogic.gdx.graphics.g2d.GlyphLayout(game.font, menuText);
-            game.font.draw(game.batch, menuText, (hudCamera.viewportWidth - layoutM.width) / 2, hudCamera.viewportHeight / 2 - 10 - layoutR.height - 5);
+        float scoreTextY = hudCamera.viewportHeight - actualHealthBarHeight - hudPadding - game.hudScoreFont.getCapHeight() - 5f;
+
+        game.hudScoreFont.draw(game.batch, "Score: " + score, hudPadding, scoreTextY);
+
+        if (player != null && player.isDead() && !isPaused) {
+            if (game.defaultFont != null) {
+                String gameOverText = "GAME OVER";
+                com.badlogic.gdx.graphics.g2d.GlyphLayout layoutGO = new com.badlogic.gdx.graphics.g2d.GlyphLayout(game.defaultFont, gameOverText);
+                game.defaultFont.draw(game.batch, gameOverText, (hudCamera.viewportWidth - layoutGO.width) / 2, hudCamera.viewportHeight / 2 + layoutGO.height + 30);
+            }
+
+            if (game.hudScoreFont != null) {
+                String restartText = "Press 'R' to Restart";
+                com.badlogic.gdx.graphics.g2d.GlyphLayout layoutR = new com.badlogic.gdx.graphics.g2d.GlyphLayout(game.hudScoreFont, restartText);
+                game.hudScoreFont.draw(game.batch, restartText, (hudCamera.viewportWidth - layoutR.width) / 2, hudCamera.viewportHeight / 2 - 10);
+
+                String menuText = "Press 'M' for Main Menu";
+                com.badlogic.gdx.graphics.g2d.GlyphLayout layoutM = new com.badlogic.gdx.graphics.g2d.GlyphLayout(game.hudScoreFont, menuText);
+                game.hudScoreFont.draw(game.batch, menuText, (hudCamera.viewportWidth - layoutM.width) / 2, hudCamera.viewportHeight / 2 - 10 - layoutR.height - 5);
+            }
         }
+
+        //key hood
+        if (playerHasKey && keyTexture != null) {
+            float keyIconSize = 24f;
+            game.batch.draw(keyTexture, hudCamera.viewportWidth - keyIconSize, hudCamera.viewportHeight - keyIconSize, keyIconSize, keyIconSize);
+        }
+
         game.batch.end();
     }
 
@@ -363,12 +556,6 @@ public class GameScreen implements Screen {
             playerNeedsPositionReset = false;
         }
     }
-
-//    public void requestPlayerDamage(float damageAmount) {
-//        if (player != null && !player.isDead()) {
-//            player.takeDamage(damageAmount);
-//        }
-//    }
 
     public void requestPlayerPositionReset() {
         if (player != null && !player.isDead()) {
@@ -432,9 +619,12 @@ public class GameScreen implements Screen {
         if (world == null || world.isLocked() || bodiesToRemove.isEmpty()) return;
 
         for (Body body : bodiesToRemove) {
+            Object userData = body.getUserData();
 
-            if (coinBodies.contains(body, true)) {
-                coinBodies.removeValue(body, true);
+            if (userData instanceof Coin){
+                Coin coinToRemove = (Coin) userData;
+                animatedCoins.removeValue(coinToRemove, true);
+                Gdx.app.log("Removal", "Scheduled Coin object removed from list.");
             }
 
             if (body.getUserData() instanceof Enemy) {
@@ -444,7 +634,6 @@ public class GameScreen implements Screen {
 
             if (body.getUserData() instanceof ShootingEnemy) {
                 ShootingEnemy sEnemy = (ShootingEnemy) body.getUserData();
-                //shootingEnemies.removeValue(sEnemy, true);
 
             }
 
@@ -466,17 +655,32 @@ public class GameScreen implements Screen {
 
         Array<Body> bodiesToDestroy = new Array<>();
 
-        for (Body coinBody : coinBodies) {
-            bodiesToDestroy.add(coinBody);
+        for (Coin coin : animatedCoins) {
+            if (coin.getBody() != null && coin.getBody().isActive()) {
+                bodiesToDestroy.add(coin.getBody());
+            }
         }
+
+
         for (Enemy enemy : enemies) {
             if (enemy.body != null) bodiesToDestroy.add(enemy.body);
         }
 
         for (Body b : bodiesToDestroy) {
-            if (!world.isLocked()) world.destroyBody(b);
-            else Gdx.app.error("RESTART", "World locked, cannot destroy body " + b.getUserData());
+            if (!world.isLocked()) {
+                for (int i = animatedCoins.size - 1; i >= 0; i--) {
+                    Coin c = animatedCoins.get(i);
+                    if (c.getBody() == b) {
+                        animatedCoins.removeIndex(i);
+                        break;
+                    }
+                }
+                world.destroyBody(b);
+            } else {
+                Gdx.app.error("RESTART", "World locked, cannot destroy body " + b.getUserData());
+            }
         }
+        bodiesToDestroy.clear();
 
         for (Projectile p : projectiles) {
             if (p.getBody() != null && p.getBody().isActive()) {
@@ -489,9 +693,9 @@ public class GameScreen implements Screen {
         if (keyBody != null && !keyBody.isActive()) {
         }
 
+        animatedCoins.clear();
         doors.clear();
         projectiles.clear();
-        coinBodies.clear();
         enemies.clear();
         shootingEnemies.clear();
 
@@ -530,8 +734,16 @@ public class GameScreen implements Screen {
                 Body body = world.createBody(bodyDef);
                 shape.setAsBox(rect.getWidth() /2f / PPM, rect.getHeight() / 2f / PPM);
                 fixtureDef.shape = shape;
-                fixtureDef.friction = 0.8f;
-                body.createFixture(fixtureDef).setUserData("ground");
+
+                // get surface_type from Tiles
+                String surfaceType = object.getProperties().get("surface_type", "ground", String.class); // ground default
+
+                if ("wall".equals(surfaceType)) {
+                    fixtureDef.friction = 0.00f;
+                } else {
+                    fixtureDef.friction = 0.8f;
+                }
+                body.createFixture(fixtureDef).setUserData(surfaceType);
             }
         }
         shape.dispose();
@@ -580,12 +792,18 @@ public class GameScreen implements Screen {
                     bodyDef.position.set(centerX, centerY);
 
                     Body coinBody = world.createBody(bodyDef);
-                    shape.setAsBox(COIN_SIZE / 2f / PPM, COIN_SIZE / 2f / PPM);
+                    shape.setAsBox(Coin.VISUAL_COIN_SIZE / 2f / PPM, Coin.VISUAL_COIN_SIZE / 2f / PPM);
                     fixtureDef.shape = shape;
                     fixtureDef.isSensor = true;
-                    coinBody.createFixture(fixtureDef).setUserData("coin");
-                    coinBody.setUserData("coin_body"); // Додатковий ідентифікатор для тіла
-                    coinBodies.add(coinBody);
+                    coinBody.createFixture(fixtureDef).setUserData("coin_fixture");
+
+                    if (coinAnimationSheetTexture != null) {
+                        Coin animatedCoin = new Coin(coinBody, coinAnimationSheetTexture);
+                        animatedCoins.add(animatedCoin);
+                    } else {
+                        Gdx.app.error("CoinCreation", "Coin animation sheet is null. Cannot create animated coin.");
+                        world.destroyBody(coinBody);
+                    }
                 }
             }
         }
@@ -616,18 +834,6 @@ public class GameScreen implements Screen {
         shape.dispose();
     }
 
-//    private void createShootingEnemies() {
-//        float x_pixels = 600f;
-//        float y_pixels = 100f + Player.FRAME_HEIGHT / 2f;
-//        float visualWidth_pixels = 32f;
-//        float visualHeight_pixels = 32f;
-//
-//        ShootingEnemy sEnemy = new ShootingEnemy(world, this, shootingEnemyTexture, projectileTexture,
-//            x_pixels, y_pixels, visualWidth_pixels, visualHeight_pixels);
-//        shootingEnemies.add(sEnemy);
-//        Gdx.app.log("GAME_SETUP", "Created shooting enemy at " + x_pixels + "," + y_pixels);
-//    }
-
     private void createEnemiesFromMap(){
         if (world == null || map == null) return;
         MapLayer enemyLayer = map.getLayers().get("Enemies");
@@ -643,7 +849,7 @@ public class GameScreen implements Screen {
 
         PolygonShape enemyShape = new PolygonShape();
 
-        enemyShape.setAsBox(ENEMY_VISUAL_WIDTH / 2f / PPM, ENEMY_VISUAL_HEIGHT / 2f / PPM);
+        enemyShape.setAsBox(ENEMY_VISUAL_WIDTH / 2f / PPM, (ENEMY_VISUAL_HEIGHT - 4) / 2f / PPM);
 
         FixtureDef enemyFixtureDef = new FixtureDef();
         enemyFixtureDef.shape = enemyShape;
@@ -654,7 +860,7 @@ public class GameScreen implements Screen {
 
         for (MapObject object : enemyLayer.getObjects()) {
             String type = object.getProperties().get("type", String.class);
-            if (type == null) continue; // Пропускаємо об'єкти без типу
+            if (type == null) continue;
 
             float xPixels = 0, yPixels = 0;
 
@@ -675,41 +881,60 @@ public class GameScreen implements Screen {
 
 
             if ("enemy".equals(type)) {
-                if (enemyTexture == null) {
-                    Gdx.app.error("ENEMY_FACTORY", "Enemy texture is null, cannot create regular enemy.");
+                if (enemyPatrolSheetTexture == null) {
+                    Gdx.app.error("ENEMY_FACTORY", "Enemy patrol sheet texture is null, cannot create regular enemy.");
                     continue;
                 }
                 float patrolDistPixels = object.getProperties().get("patrolDistance", 64f, Float.class);
 
                 enemyBodyDef.position.set(xPixels / PPM, yPixels / PPM);
                 Body regEnemyBody = world.createBody(enemyBodyDef);
-
                 regEnemyBody.createFixture(enemyFixtureDef).setUserData("enemy_fixture");
 
-                Enemy enemy = new Enemy(regEnemyBody, enemyTexture, xPixels, patrolDistPixels,
+                Enemy enemy = new Enemy(regEnemyBody, enemyPatrolSheetTexture,
+                    xPixels, patrolDistPixels,
                     ENEMY_VISUAL_WIDTH, ENEMY_VISUAL_HEIGHT, this);
                 enemies.add(enemy);
+                Gdx.app.log("GAME_SETUP", "Created animated patrolling enemy from map at " + xPixels + "," + yPixels);
+
 
             } else if ("shooting_enemy".equals(type)) {
-                if (shootingEnemyTexture == null || projectileTexture == null) {
-                    Gdx.app.error("ENEMY_FACTORY", "Shooting enemy or projectile texture is null.");
+                if (shootingEnemySheetTexture == null || projectileTexture == null) {
+                    Gdx.app.error("ENEMY_FACTORY", "Shooting enemy animation sheet or projectile texture is null.");
                     continue;
                 }
-
-
 
                 float detectionRadiusPixels = object.getProperties().get("detectionRadius", ShootingEnemy.DETECTION_RADIUS * PPM, Float.class);
                 float shootCooldownSeconds = object.getProperties().get("shootCooldown", ShootingEnemy.SHOOT_COOLDOWN, Float.class);
 
-
-                // ShootingEnemy creatin body inside staticBody
-                ShootingEnemy sEnemy = new ShootingEnemy(world, this, shootingEnemyTexture, projectileTexture,
+                ShootingEnemy sEnemy = new ShootingEnemy(world, this,
+                    shootingEnemySheetTexture,
+                    projectileTexture,
                     xPixels, yPixels,
                     SHOOTING_ENEMY_VISUAL_WIDTH, SHOOTING_ENEMY_VISUAL_HEIGHT,
                     detectionRadiusPixels, shootCooldownSeconds);
+
                 shootingEnemies.add(sEnemy);
-                Gdx.app.log("GAME_SETUP", "Created shooting enemy from map at " + xPixels + "," + yPixels);
+                Gdx.app.log("GAME_SETUP", "CREATED animated shooting enemy. Total shooting enemies: " + shootingEnemies.size);
+                if (sEnemy.body == null) {
+                    Gdx.app.error("EnemyFactory", "Shooting enemy body is NULL after creation!");
+                } else {
+                    Gdx.app.log("EnemyFactory", "Shooting enemy body position: " + sEnemy.body.getPosition());
+                    if (sEnemy.getActiveAnimation() == null) {
+                        Gdx.app.error("EnemyFactory", "Shooting enemy ACTIVE ANIMATION is NULL after creation!");
+                    }
+                }
+
+                Gdx.app.log("GAME_SETUP", "Created animated shooting enemy from map at " + xPixels + "," + yPixels);
+                Gdx.app.log("EnemyFactory", "MATCHED type 'shooting_enemy' at x: " + xPixels + ", y: " + yPixels);
+                Gdx.app.log("EnemyFactory", "Attempting to create shooting_enemy. Sheet loaded: "
+                    + (shootingEnemySheetTexture != null)
+                    + ", Projectile tex loaded: " + (projectileTexture != null));
             }
+
+            Gdx.app.log("EnemyFactory", "Processing object with type: " + type + " at X: "
+                + object.getProperties().get("x", Float.class)
+                + ", Y: " + object.getProperties().get("y", Float.class) );
         }
         enemyShape.dispose();
     }
@@ -730,6 +955,7 @@ public class GameScreen implements Screen {
             if (!"door".equals(object.getProperties().get("type", String.class))) {
                 continue;
             }
+
             if (object instanceof RectangleMapObject) {
                 Rectangle rect = ((RectangleMapObject) object).getRectangle();
 
@@ -741,15 +967,27 @@ public class GameScreen implements Screen {
                 Body doorBody = world.createBody(bodyDef);
                 shape.setAsBox(rect.getWidth() / 2f / PPM, rect.getHeight() / 2f / PPM);
                 fixtureDef.shape = shape;
-                fixtureDef.isSensor = true;
 
                 String nextLevel = object.getProperties().get("nextLevel", "main_menu", String.class); //na main menu
                 boolean initiallyLocked = object.getProperties().get("initiallyLocked", true, Boolean.class);
 
                 DoorData doorData = new DoorData(doorBody, new Rectangle(rect), nextLevel, initiallyLocked);
+
+                Fixture doorFixture;
+                if (initiallyLocked) {
+                    fixtureDef.isSensor = false;
+                    doorFixture = doorBody.createFixture(fixtureDef);
+                } else {
+                    fixtureDef.isSensor = true;
+                    doorFixture = doorBody.createFixture(fixtureDef);
+                    doorData.isOpen = true;
+                }
+
                 doors.add(doorData);
 
-                Gdx.app.log("GAME_SETUP", "Door created leading to: " + nextLevel + ", Locked: " + initiallyLocked);
+                Gdx.app.log("GAME_SETUP", "Door created leading to: " + nextLevel +
+                    ", InitiallyLocked: " + initiallyLocked +
+                    ", IsSensor: " + doorFixture.isSensor());
             }
         }
         shape.dispose();
@@ -762,17 +1000,13 @@ public class GameScreen implements Screen {
             gameViewport.update(width, height, false);
         }
 
-        if (hudCamera != null) {
-            hudCamera.setToOrtho(false, width, height);
-            hudCamera.update();
+        if (hudViewport != null) {
+            hudViewport.update(width, height, true);
         }
-//        camera.viewportWidth = 800;
-//        camera.viewportHeight = 480;
-//        camera.update();
-//
-//        hudCamera.viewportWidth = 800;
-//        hudCamera.viewportHeight = 480;
-//        hudCamera.update();
+
+        if (pauseGuiStage != null) {
+            pauseGuiStage.getViewport().update(width,height,true);
+        }
     }
 
     @Override
@@ -794,36 +1028,54 @@ public class GameScreen implements Screen {
         if (playerRunSheetTexture != null) playerRunSheetTexture.dispose();
         if (playerJumpSheetTexture != null) playerJumpSheetTexture.dispose();
         if (playerFallSheetTexture != null) playerFallSheetTexture.dispose();
-        if (coinTexture != null) coinTexture.dispose();
-        if (enemyTexture != null) enemyTexture.dispose();
-        if (shootingEnemyTexture != null) shootingEnemyTexture.dispose();
+        if (coinAnimationSheetTexture != null) coinAnimationSheetTexture.dispose();
+        if (enemyPatrolSheetTexture != null) enemyPatrolSheetTexture.dispose();
+        if (shootingEnemySheetTexture != null) shootingEnemySheetTexture.dispose();
         if (projectileTexture != null) projectileTexture.dispose();
         if (keyTexture != null) keyTexture.dispose();
         if (doorClosedTexture != null) doorClosedTexture.dispose();
         if (doorOpenTexture != null) doorOpenTexture.dispose();
 
+        //sounds
+        if (walkSound != null) walkSound.dispose();
+        if (jumpSound != null) jumpSound.dispose();
+        if (playerHurtSound != null) playerHurtSound.dispose();
+        if (playerDeathSound != null) playerDeathSound.dispose();
+        if (enemyDeathSound != null) enemyDeathSound.dispose();
+        if (shootSound != null) shootSound.dispose();
+        if (coinPickupSound != null) coinPickupSound.dispose();
+        if (keyPickupSound != null) keyPickupSound.dispose();
+
+
         playerIdleSheetTexture = null;
         playerRunSheetTexture = null;
         playerJumpSheetTexture = null;
         playerFallSheetTexture = null;
-        coinTexture = null;
+        coinAnimationSheetTexture = null;
         enemyTexture = null;
+        enemyPatrolSheetTexture = null;
+        shootingEnemySheetTexture = null;
 
         if (player != null) {
-            player.dispose(); // Звільняємо тіло гравця, якщо воно ще існує
+            player.dispose();
             player = null;
         }
 
-        // before release world, release enemies and other obj
         if (world != null && !world.isLocked()) {
-            // release bodies (coin & enemy)
+            for (Coin coin : animatedCoins) {
+                if (coin.getBody() != null && coin.getBody().isActive()) {
+                    world.destroyBody(coin.getBody());
+                }
+            }
+        }
+        animatedCoins.clear();
+
+        if (world != null && !world.isLocked()) {
             Array<Body> allBodies = new Array<>();
             world.getBodies(allBodies);
             for (Body body : allBodies) {
-                // check if its not a player body, if it not null
                 if (player != null && body == player.getBody()) continue;
 
-                // delete from spiski, if not already
                 if (coinBodies.contains(body, true)) coinBodies.removeValue(body, true);
                 if (body.getUserData() instanceof Enemy) {
                     enemies.removeValue((Enemy)body.getUserData(), true);
@@ -831,9 +1083,7 @@ public class GameScreen implements Screen {
                 world.destroyBody(body);
             }
         }
-        coinBodies.clear();
         enemies.clear();
-
 
         if (world != null) world.dispose();
         if (debugRenderer != null) debugRenderer.dispose();

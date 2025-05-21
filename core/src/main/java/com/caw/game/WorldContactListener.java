@@ -14,7 +14,7 @@ public class WorldContactListener implements ContactListener {
     private Player player;
 
     public static final float ENEMY_DAMAGE = 25f;
-    public static final float PROJECTILE_DAMAGE = 20f; // Damage from projectile
+    public static final float PROJECTILE_DAMAGE = 25f;
 
     public WorldContactListener(GameScreen gameScreen) {
         this.gameScreen = gameScreen;
@@ -29,7 +29,11 @@ public class WorldContactListener implements ContactListener {
     }
 
     private boolean isPlayerFixture(Fixture fixture) {
-        return fixture != null && fixture.getUserData() != null && fixture.getUserData().equals("player");
+        return fixture != null && fixture.getUserData() != null && "player".equals(fixture.getUserData().toString());
+    }
+
+    private boolean isSurfaceType(Fixture fixture, String type) {
+        return fixture != null && fixture.getUserData() != null && type.equals(fixture.getUserData().toString());
     }
 
     private boolean isPlayerFeetFixture(Fixture fixture) {
@@ -40,8 +44,13 @@ public class WorldContactListener implements ContactListener {
         return fixture != null && fixture.getUserData() != null && fixture.getUserData().equals("ground");
     }
 
+    private boolean isWallFixture(Fixture fixture) {
+        return fixture != null && fixture.getUserData() != null && "wall".equals(fixture.getUserData().toString());
+    }
+
     private boolean isCoinFixture(Fixture fixture) {
-        return fixture != null && fixture.getUserData() != null && fixture.getUserData().equals("coin");
+        return fixture != null && fixture.getUserData() != null &&
+            "coin_fixture".equals(fixture.getUserData().toString());
     }
 
     private boolean isEnemyFixture(Fixture fixture) {
@@ -49,7 +58,6 @@ public class WorldContactListener implements ContactListener {
         return fixture.getBody() != null && fixture.getBody().getUserData() instanceof Enemy;
     }
 
-    // Helper to check if fixture's UserData is a Projectile instance
     private boolean isProjectileFixture(Fixture fixture) {
         return fixture != null && fixture.getUserData() instanceof Projectile;
     }
@@ -102,21 +110,35 @@ public class WorldContactListener implements ContactListener {
         }
 
         // player - coin
-        Fixture playerCoinF = null;
-        Fixture coinItselfF = null;
-        if (isPlayerFixture(fixA) && isCoinFixture(fixB)) {
-            playerCoinF = fixA;
-            coinItselfF = fixB;
-        } else if (isPlayerFixture(fixB) && isCoinFixture(fixA)) {
-            playerCoinF = fixB;
-            coinItselfF = fixA;
+        Fixture coinBodyFixture = null;
+
+        if ((isPlayerFixture(fixA) || isPlayerFeetFixture(fixA)) && isCoinFixture(fixB)) {
+            playerContactFixture = fixA;
+            coinBodyFixture = fixB;
+        } else if ((isPlayerFixture(fixB) || isPlayerFeetFixture(fixB)) && isCoinFixture(fixA)) {
+            playerContactFixture = fixB;
+            coinBodyFixture = fixA;
         }
 
-        if (playerCoinF != null && coinItselfF != null) {
-            Gdx.app.log("CONTACT", "Player touched a coin!");
-            if (gameScreen != null) {
-                gameScreen.collectCoin();
-                gameScreen.scheduleBodyForRemoval(coinItselfF.getBody());
+        if (playerContactFixture != null && coinBodyFixture != null) {
+            Object coinBodyUserData = coinBodyFixture.getBody().getUserData();
+            if (coinBodyUserData instanceof Coin) {
+                Coin contactedCoin = (Coin) coinBodyUserData;
+                if (!contactedCoin.isScheduledForRemoval()) {
+                    Gdx.app.log("CONTACT", "Player touched an animated coin!");
+                    gameScreen.collectCoin();
+                    // coin sound
+                    if (gameScreen != null) gameScreen.playCoinPickupSound();
+                    contactedCoin.scheduleForRemoval();
+                    gameScreen.scheduleBodyForRemoval(contactedCoin.getBody());
+                }
+            } else {
+                Gdx.app.error("CoinContact", "Coin fixture detected, but body UserData is not a Coin object: " + coinBodyUserData);
+                if (coinBodyFixture.getBody().getUserData() != null && "coin_body".equals(coinBodyFixture.getBody().getUserData().toString())) {
+                    Gdx.app.log("CONTACT", "Player touched a legacy coin_body!");
+                    gameScreen.collectCoin();
+                    gameScreen.scheduleBodyForRemoval(coinBodyFixture.getBody());
+                }
             }
         }
 
@@ -126,45 +148,83 @@ public class WorldContactListener implements ContactListener {
             if (keyFixture != null && keyFixture.getBody() == gameScreen.keyBody) {
                 Gdx.app.log("CONTACT", "Player picked up the key!");
                 gameScreen.playerHasKey = true;
+                if (gameScreen != null) gameScreen.playKeyPickupSound();
                 if (gameScreen.keyBody != null) {
                     gameScreen.scheduleBodyForRemoval(gameScreen.keyBody);
                     gameScreen.keyBody = null;
                 }
-                // TODO: sound
             }
         }
 
         //player - door
-        Object userDataA = fixA.getUserData();
-        Object userDataB = fixB.getUserData();
+        Object userDataBodyA = fixA.getBody().getUserData();
+        Object userDataBodyB = fixB.getBody().getUserData();
         GameScreen.DoorData contactedDoor = null;
-        Fixture playerDoorContactFixture = null;
+        Fixture playerFixture = null;
+        Fixture doorContactedFixture = null;
 
-        if (userDataA instanceof GameScreen.DoorData && (isPlayerFixture(fixB) || isPlayerFeetFixture(fixB))) {
-            contactedDoor = (GameScreen.DoorData) userDataA;
-            playerDoorContactFixture = fixB;
-        } else if (userDataB instanceof GameScreen.DoorData && (isPlayerFixture(fixA) || isPlayerFeetFixture(fixA))) {
-            contactedDoor = (GameScreen.DoorData) userDataB;
-            playerDoorContactFixture = fixA;
-        }
-
-        if (contactedDoor != null && player != null && !player.isDead()) {
-            Gdx.app.log("CONTACT", "Player at door. Locked: " + contactedDoor.isLocked + ", HasKey: " + gameScreen.playerHasKey);
-            if (contactedDoor.isLocked) {
-                if (gameScreen.playerHasKey) {
-                    Gdx.app.log("DOOR", "Door unlocked and opened by player!");
-                    contactedDoor.isOpen = true;
-                    contactedDoor.isLocked = false;
-                    loadNextLevel(contactedDoor.nextLevelAsset);
-                } else {
-                    Gdx.app.log("DOOR", "Door is locked. Player needs a key.");
-                }
-            } else {
-                Gdx.app.log("DOOR", "Player entered an unlocked door.");
-                contactedDoor.isOpen = true;
-                loadNextLevel(contactedDoor.nextLevelAsset);
+        if (userDataBodyA instanceof GameScreen.DoorData) {
+            contactedDoor = (GameScreen.DoorData) userDataBodyA;
+            doorContactedFixture = fixA;
+            playerFixture = fixB;
+            if (contactedDoor.body != fixA.getBody()) {
+                Gdx.app.error("DOOR_ASSERTION_FAIL", "DoorData on bodyA, but contactedDoor.body != fixA.getBody()");
+            }
+        } else if (userDataBodyB instanceof GameScreen.DoorData) {
+            contactedDoor = (GameScreen.DoorData) userDataBodyB;
+            doorContactedFixture = fixB;
+            playerFixture = fixA;
+            if (contactedDoor.body != fixB.getBody()) {
+                Gdx.app.error("DOOR_ASSERTION_FAIL", "DoorData on bodyB, but contactedDoor.body != fixB.getBody()");
             }
         }
+
+        // is other object a player?
+        if (contactedDoor != null && playerFixture != null &&
+            !(isPlayerFixture(playerFixture) || isPlayerFeetFixture(playerFixture))) {
+            Gdx.app.log("DOOR_CONTACT_DEBUG", "Door contact detected, but other fixture is not player. Other fixture UserData: " + (playerFixture.getUserData() != null ? playerFixture.getUserData().toString() : "null"));
+            contactedDoor = null;
+            doorContactedFixture = null;
+        }
+
+
+        if (contactedDoor != null && player != null && !player.isDead() && doorContactedFixture != null) {
+            Gdx.app.log("CONTACT_DOOR", "Player at door. Door Locked: " + contactedDoor.isLocked +
+                ", Player HasKey: " + gameScreen.playerHasKey +
+                ", Door Fixture IsSensor (at beginContact): " + doorContactedFixture.isSensor());
+
+            if (doorContactedFixture.isSensor()) {
+                Gdx.app.log("DOOR_PATH", "Path A: Door is SENSOR.");
+                Gdx.app.log("DOOR_INTERACTION", "Player contacting SENSOR door. Transitioning.");
+                if (!contactedDoor.isOpen) {
+                    contactedDoor.isOpen = true;
+                }
+                loadNextLevel(contactedDoor.nextLevelAsset);
+            } else {
+                Gdx.app.log("DOOR_PATH", "Path B: Door is SOLID.");
+                if (contactedDoor.isLocked) {
+                    Gdx.app.log("DOOR_PATH", "Path B1: Door is SOLID and LOCKED.");
+                    if (gameScreen.playerHasKey) {
+                        Gdx.app.log("DOOR_PATH", "Path B1a: Door is SOLID, LOCKED, and PLAYER HAS KEY.");
+                        Gdx.app.log("DOOR_INTERACTION", "Player has key for SOLID/LOCKED door. Unlocking.");
+                        contactedDoor.isLocked = false;
+                        contactedDoor.isOpen = true;
+
+                        gameScreen.scheduleFixtureToMakeSensor(doorContactedFixture);
+                        Gdx.app.log("DOOR_PHYSICS", "Door fixture on body for DoorData (" + contactedDoor.nextLevelAsset +
+                            ") scheduled to become SENSOR.");
+                    } else {
+                        Gdx.app.log("DOOR_PATH", "Path B1b: Door is SOLID, LOCKED, but PLAYER NO KEY.");
+                        Gdx.app.log("DOOR_INTERACTION", "Player at SOLID/LOCKED door, NO KEY. Player bumps.");
+                    }
+                } else {
+                    Gdx.app.log("DOOR_PATH", "Path B2: Door is SOLID but NOT LOCKED (isLocked=false).");
+                    Gdx.app.error("DOOR_LOGIC_ERROR", "Door fixture is SOLID, but DoorData.isLocked is FALSE. Scheduling to become sensor.");
+                    if (!contactedDoor.isOpen) contactedDoor.isOpen = true;
+                    gameScreen.scheduleFixtureToMakeSensor(doorContactedFixture);
+                }
+            }
+            }
 
 
         // player - enemy
@@ -189,7 +249,7 @@ public class WorldContactListener implements ContactListener {
 
                 if (enemy.isStomped() || enemy.isScheduledForRemoval()) {
                     if (playerSensorForEnemy != null || playerMainForEnemy != null) {
-                        contact.setEnabled(false); // prevent interaction with stomped/removed enemy
+                        contact.setEnabled(false);
                     }
                     return;
                 }
@@ -240,7 +300,6 @@ public class WorldContactListener implements ContactListener {
 
     private void loadNextLevel(String levelAsset) {
         Gdx.app.log("LEVEL_TRANSITION", "Loading next level: " + levelAsset);
-        // Тут має бути логіка переходу. Наприклад:
         if ("main_menu".equals(levelAsset)) {
             gameScreen.game.setScreen(new MainMenuScreen(gameScreen.game));
         } else if (levelAsset.endsWith(".tmx")) {
@@ -271,9 +330,12 @@ public class WorldContactListener implements ContactListener {
         Fixture fixA = contact.getFixtureA();
         Fixture fixB = contact.getFixtureB();
 
+        boolean playerIsA = isPlayerFixture(fixA);
+        boolean playerIsB = isPlayerFixture(fixB);
+
         // Player-Coin
-        if ((isPlayerFixture(fixA) && isCoinFixture(fixB)) ||
-            (isPlayerFixture(fixB) && isCoinFixture(fixA))) {
+        if (((isPlayerFixture(fixA) || isPlayerFeetFixture(fixA)) && isCoinFixture(fixB)) ||
+            ((isPlayerFixture(fixB) || isPlayerFeetFixture(fixB)) && isCoinFixture(fixA))) {
             contact.setEnabled(false);
         }
 
@@ -306,19 +368,54 @@ public class WorldContactListener implements ContactListener {
         }
 
         if (projectileInstance != null) {
-            // If projectile is already scheduled for removal, disable contacts
             if (projectileInstance.isScheduledForRemoval()) {
                 contact.setEnabled(false);
                 return;
             }
 
-            // projectile - ground
              Fixture other = (projectileInstance == fixA.getUserData()) ? fixB : fixA;
              if (isGroundFixture(other)) {
                 projectileInstance.scheduleForRemoval();
                 contact.setEnabled(false);
              }
         }
+
+        Fixture doorFixtureInPreSolve = null;
+        GameScreen.DoorData doorDataForPreSolve = null;
+        Fixture otherFixtureInPreSolve = null;
+
+        Object bodyUserDataA_ps = fixA.getBody().getUserData();
+        Object bodyUserDataB_ps = fixB.getBody().getUserData();
+
+        if (bodyUserDataA_ps instanceof GameScreen.DoorData) {
+            doorDataForPreSolve = (GameScreen.DoorData) bodyUserDataA_ps;
+            if (doorDataForPreSolve.body == fixA.getBody()) {
+                doorFixtureInPreSolve = fixA;
+                otherFixtureInPreSolve = fixB;
+            }
+        } else if (bodyUserDataB_ps instanceof GameScreen.DoorData) {
+            doorDataForPreSolve = (GameScreen.DoorData) bodyUserDataB_ps;
+            if (doorDataForPreSolve.body == fixB.getBody()) {
+                doorFixtureInPreSolve = fixB;
+                otherFixtureInPreSolve = fixA;
+            }
+        }
+
+        if (doorDataForPreSolve != null && doorFixtureInPreSolve != null && otherFixtureInPreSolve != null) {
+            boolean otherIsPlayer = isPlayerFixture(otherFixtureInPreSolve) || isPlayerFeetFixture(otherFixtureInPreSolve);
+
+            if (otherIsPlayer) {
+                if (doorFixtureInPreSolve.isSensor() || (!doorDataForPreSolve.isLocked && doorDataForPreSolve.isOpen)) {
+                    contact.setEnabled(false);
+                }
+            }
+        }
+
+        if (((playerIsA || (fixA.getUserData() != null && fixA.getUserData().equals("playerFeet"))) && isSurfaceType(fixB, "coin_fixture")) ||
+            ((playerIsB || (fixB.getUserData() != null && fixB.getUserData().equals("playerFeet"))) && isSurfaceType(fixA, "coin_fixture"))) {
+            contact.setEnabled(false);
+        }
+
     }
 
     @Override
