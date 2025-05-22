@@ -25,7 +25,6 @@ public class Player {
     private Animation<TextureRegion> runAnimation;
     private TextureRegion jumpFrame;
     private TextureRegion fallFrame;
-    private Animation<TextureRegion> deathAnimation;
 
     public static final int SPRITESHEET_FRAME_WIDTH = 32;
     public static final int SPRITESHEET_FRAME_HEIGHT = 24;
@@ -38,7 +37,7 @@ public class Player {
     public static final float PPM = GameScreen.PPM;
 
     private Vector2 lastSafePositionMeters;
-    public static final float FALL_DAMAGE = 25f; // all damage
+    public static final float FALL_DAMAGE = 25f; // fall damage
     public static final float MIN_Y_DEATH_LEVEL_PIXELS = -100f;
     private float timeSinceLastSafePositionUpdate = 0f;
     private static final float SAFE_POSITION_UPDATE_INTERVAL = 0.25f;
@@ -47,14 +46,14 @@ public class Player {
     private float currentHealth;
     private boolean isDead = false;
 
-    private Vector2 spawnPointMeters; //meters
+    private Vector2 spawnPointMeters;
     private WorldContactListener contactListener;
 
     // KNOCKBACK FORCE
-    public static final float KNOCKBACK_HORIZONTAL_BASE_FORCE = 0.2f; // horizontal jump
-    public static final float KNOCKBACK_VERTICAL_BASE_FORCE = 0.2f;   // vertical jump
+    public static final float KNOCKBACK_HORIZONTAL_BASE_FORCE = 0.2f;
+    public static final float KNOCKBACK_VERTICAL_BASE_FORCE = 0.2f;
     private float invulnerabilityTimer = 0f;
-    public static final float INVULNERABILITY_DURATION = 0.85f; // immune timer in sec
+    public static final float INVULNERABILITY_DURATION = 0.85f;
 
     // sounds
     private float walkSoundTimer = 0f;
@@ -255,14 +254,6 @@ public class Player {
         }
     }
 
-    public void setLastSafePosition(Vector2 newSafePositionMeters) {
-        if (newSafePositionMeters != null) {
-            this.lastSafePositionMeters.set(newSafePositionMeters);
-            Gdx.app.log("PlayerSafePos", "Last safe position explicitly set to: " + this.lastSafePositionMeters);
-        }
-    }
-
-
     private State determineCurrentState() {
         if (isDead) return State.DEAD;
         if (body == null || !body.isActive() || contactListener == null) return State.IDLE;
@@ -367,7 +358,7 @@ public class Player {
     public void respawn() {
         isDead = false;
         currentHealth = maxHealth;
-        invulnerabilityTimer = 0f; // reset immune timer
+        invulnerabilityTimer = 0f; // reset
         if (body != null) {
             body.setTransform(spawnPointMeters, 0);
             body.setLinearVelocity(0, 0);
@@ -390,7 +381,6 @@ public class Player {
     }
 
     public Vector2 getPositionMeters() {
-        // check for null for body
         return body != null && body.isActive() ? body.getPosition() : new Vector2(spawnPointMeters);
     }
 

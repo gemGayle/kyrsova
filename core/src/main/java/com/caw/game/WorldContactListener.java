@@ -70,16 +70,13 @@ public class WorldContactListener implements ContactListener {
 
         // Player - Projectile Collision
         Projectile projectile = null;
-        Fixture projectileFixture = null;
         Fixture playerContactFixture = null; // The fixture of the player that made contact
 
         if (isProjectileFixture(fixA) && (isPlayerFixture(fixB) || isPlayerFeetFixture(fixB))) {
             projectile = (Projectile) fixA.getUserData();
-            projectileFixture = fixA;
             playerContactFixture = fixB;
         } else if (isProjectileFixture(fixB) && (isPlayerFixture(fixA) || isPlayerFeetFixture(fixA))) {
             projectile = (Projectile) fixB.getUserData();
-            projectileFixture = fixB;
             playerContactFixture = fixA;
         }
 
@@ -225,7 +222,6 @@ public class WorldContactListener implements ContactListener {
                 }
             }
             }
-
 
         // player - enemy
         Fixture playerSensorForEnemy = null;

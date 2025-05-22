@@ -18,9 +18,6 @@ public class GameStart extends Game {
     public void create() {
         batch = new SpriteBatch();
         prefs = Gdx.app.getPreferences("MyGamePrefrences");
-
-//        defaultFont = new BitmapFont();
-
         FreeTypeFontGenerator generator = null;
         try {
             generator = new FreeTypeFontGenerator(Gdx.files.internal("assets/fonts/Hud_font.ttf"));
@@ -33,7 +30,6 @@ public class GameStart extends Game {
 
             //for HUD
             parameter.size = 16;
-            // parameter.color = Color.LIGHT_GRAY;
             hudScoreFont = generator.generateFont(parameter);
 
         } catch (Exception e) {

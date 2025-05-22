@@ -6,24 +6,19 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.physics.box2d.Body;
-import com.badlogic.gdx.physics.box2d.BodyDef;
 import com.badlogic.gdx.physics.box2d.Fixture;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
 
 public class Enemy {
     private float stateTime;
-    private boolean MovingRight = true;
     public Body body;
     private Animation<TextureRegion> patrolAnimation;
-//    private TextureRegion textureRegion;
     public static final int SPRITESHEET_FRAME_WIDTH = 32;
     public static final int SPRITESHEET_FRAME_HEIGHT = 20;
     private boolean movingRight = true;
 
     private float speed = 1.0f;
-    private float startX_meters;
-    private float patrolDistanceMeters;
 
     private float patrolCenterX_meters;
     private float patrolHalfDistanceMeters;
@@ -59,7 +54,6 @@ public class Enemy {
             this.body.setUserData(this);
         }
         stateTime = 0f;
-        Gdx.app.log("EnemyInit", "startX_m: " + startX_meters + ", patrolDist_m: " + patrolDistanceMeters + ", speed: " + speed);
     }
     private void loadAnimations(Texture patrolSheet) {
         if (patrolSheet != null) {
@@ -70,11 +64,6 @@ public class Enemy {
                 patrolFrames.add(tmpPatrol[0][i]);
             }
             patrolAnimation = new Animation<>(0.15f, patrolFrames, Animation.PlayMode.LOOP);
-        } else {
-            Gdx.app.error("EnemyAnimation", "Patrol sheet is null!");
-            Texture dummyTexture = new Texture(Gdx.files.internal("assets/enemy.png"));
-            TextureRegion dummyRegion = new TextureRegion(dummyTexture);
-            patrolAnimation = new Animation<>(1f, new TextureRegion[]{dummyRegion});
         }
     }
 

@@ -3,7 +3,6 @@ package com.caw.game;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input.Keys;
 import com.badlogic.gdx.Screen;
-import com.badlogic.gdx.assets.AssetManager;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
@@ -31,7 +30,6 @@ import com.badlogic.gdx.Input;
 
 public class GameScreen implements Screen {
     final GameStart game;
-    private AssetManager assetManager;
     private World world;
     private Box2DDebugRenderer debugRenderer;
     private WorldContactListener contactListener;
@@ -60,9 +58,6 @@ public class GameScreen implements Screen {
     public static final float PPM = 40;
 
     //coin
-    private Texture coinTexture;
-    private static final float COIN_SIZE = 8f;
-    private Array<Body> coinBodies;
     private Array<Body> bodiesToRemove;
     private Array<Fixture> fixturesToMakeSensor;
 
@@ -80,8 +75,6 @@ public class GameScreen implements Screen {
     private Array<Enemy> enemies;
     private Array<ShootingEnemy> shootingEnemies;
     private Array<Projectile> projectiles;
-    private Texture enemyTexture;
-    private Texture shootingEnemyTexture;
     private Texture projectileTexture;
     private static final float ENEMY_VISUAL_WIDTH = 16f;
     private static final float ENEMY_VISUAL_HEIGHT = 16f;
@@ -121,7 +114,6 @@ public class GameScreen implements Screen {
         this.game = game;
         gameCamera = new OrthographicCamera();
         hudCamera = new OrthographicCamera();
-//        hudCamera.setToOrtho(false, WORLD_WIDTH_PIXELS, WORLD_HEIGHT_PIXELS);
     }
 
 
@@ -159,8 +151,6 @@ public class GameScreen implements Screen {
         enemyPatrolSheetTexture = new Texture(Gdx.files.internal("assets/enemy_animation_sheet.png"));
         shootingEnemySheetTexture = new Texture(Gdx.files.internal("assets/shooting_enemy_animation_sheet.png"));
 
-        enemyTexture = new Texture(Gdx.files.internal("assets/enemy.png"));
-        shootingEnemyTexture = new Texture(Gdx.files.internal("assets/shooting_enemy.png"));
         projectileTexture = new Texture(Gdx.files.internal("assets/projectile.png"));
 
         //ui
@@ -174,8 +164,6 @@ public class GameScreen implements Screen {
                     buttonStyle.font = game.hudScoreFont;
                     buttonStyle.fontColor = Color.LIGHT_GRAY;
                 }
-            } else {
-                Gdx.app.log("GameScreen", "game.defaultFont is null, pause menu UI font not changed.");
             }
         } catch (Exception e) {
             Gdx.app.error("GameScreen", "Could not load uiSkin for pause menu", e);
@@ -651,8 +639,8 @@ public class GameScreen implements Screen {
         if (player != null) {
             player.respawn();
         }
-        playerNeedsPositionReset = false;
 
+        playerNeedsPositionReset = false;
         Array<Body> bodiesToDestroy = new Array<>();
 
         for (Coin coin : animatedCoins) {
@@ -660,7 +648,6 @@ public class GameScreen implements Screen {
                 bodiesToDestroy.add(coin.getBody());
             }
         }
-
 
         for (Enemy enemy : enemies) {
             if (enemy.body != null) bodiesToDestroy.add(enemy.body);
@@ -862,7 +849,7 @@ public class GameScreen implements Screen {
             String type = object.getProperties().get("type", String.class);
             if (type == null) continue;
 
-            float xPixels = 0, yPixels = 0;
+            float xPixels, yPixels;
 
             if (object instanceof RectangleMapObject) {
                 Rectangle rect = ((RectangleMapObject) object).getRectangle();
@@ -924,17 +911,7 @@ public class GameScreen implements Screen {
                         Gdx.app.error("EnemyFactory", "Shooting enemy ACTIVE ANIMATION is NULL after creation!");
                     }
                 }
-
-                Gdx.app.log("GAME_SETUP", "Created animated shooting enemy from map at " + xPixels + "," + yPixels);
-                Gdx.app.log("EnemyFactory", "MATCHED type 'shooting_enemy' at x: " + xPixels + ", y: " + yPixels);
-                Gdx.app.log("EnemyFactory", "Attempting to create shooting_enemy. Sheet loaded: "
-                    + (shootingEnemySheetTexture != null)
-                    + ", Projectile tex loaded: " + (projectileTexture != null));
             }
-
-            Gdx.app.log("EnemyFactory", "Processing object with type: " + type + " at X: "
-                + object.getProperties().get("x", Float.class)
-                + ", Y: " + object.getProperties().get("y", Float.class) );
         }
         enemyShape.dispose();
     }
@@ -985,9 +962,6 @@ public class GameScreen implements Screen {
 
                 doors.add(doorData);
 
-                Gdx.app.log("GAME_SETUP", "Door created leading to: " + nextLevel +
-                    ", InitiallyLocked: " + initiallyLocked +
-                    ", IsSensor: " + doorFixture.isSensor());
             }
         }
         shape.dispose();
@@ -1052,7 +1026,6 @@ public class GameScreen implements Screen {
         playerJumpSheetTexture = null;
         playerFallSheetTexture = null;
         coinAnimationSheetTexture = null;
-        enemyTexture = null;
         enemyPatrolSheetTexture = null;
         shootingEnemySheetTexture = null;
 
@@ -1070,19 +1043,6 @@ public class GameScreen implements Screen {
         }
         animatedCoins.clear();
 
-        if (world != null && !world.isLocked()) {
-            Array<Body> allBodies = new Array<>();
-            world.getBodies(allBodies);
-            for (Body body : allBodies) {
-                if (player != null && body == player.getBody()) continue;
-
-                if (coinBodies.contains(body, true)) coinBodies.removeValue(body, true);
-                if (body.getUserData() instanceof Enemy) {
-                    enemies.removeValue((Enemy)body.getUserData(), true);
-                }
-                world.destroyBody(body);
-            }
-        }
         enemies.clear();
 
         if (world != null) world.dispose();

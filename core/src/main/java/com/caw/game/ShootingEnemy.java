@@ -61,8 +61,7 @@ public class ShootingEnemy {
         if (activeAnimation != null) {
             this.stateTime = (float)(Math.random() * activeAnimation.getAnimationDuration());
         } else {
-            this.stateTime = 0f; // if nema animations
-            Gdx.app.error("ShootingEnemyConstruct", "activeAnimation is null after loadAnimation, cannot set random stateTime based on duration.");
+            this.stateTime = 0f;
         }
 
         BodyDef bodyDef = new BodyDef();
@@ -120,7 +119,7 @@ public class ShootingEnemy {
             }
         }
 
-        // right left for canon
+        // right left for "canon"
         if (player != null && !player.isDead() && body != null && body.isActive()) {
             Vector2 enemyPos = body.getPosition();
             if (enemyPos.dst(player.getPositionMeters()) <= instanceDetectionRadiusMeters * 1.2f) {
