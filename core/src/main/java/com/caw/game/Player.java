@@ -11,7 +11,7 @@ import com.badlogic.gdx.physics.box2d.*;
 import com.badlogic.gdx.utils.Array;
 
 public class Player {
-    private GameScreen gameScreen;
+    final GameScreen gameScreen;
     public enum State {IDLE, RUNNING, JUMPING, FALLING, DEAD}
     private State currentState;
     private State previousState;
@@ -19,7 +19,7 @@ public class Player {
     private boolean facingRight = true;
 
     public Body body;
-    private World world;
+    final World world;
 
     private Animation<TextureRegion> idleAnimation;
     private Animation<TextureRegion> runAnimation;
@@ -36,18 +36,18 @@ public class Player {
     public static final int FRAME_HEIGHT = 16;
     public static final float PPM = GameScreen.PPM;
 
-    private Vector2 lastSafePositionMeters;
-    public static final float FALL_DAMAGE = 25f; // fall damage
+    final Vector2 lastSafePositionMeters;
+    public static final float FALL_DAMAGE = 25f;
     public static final float MIN_Y_DEATH_LEVEL_PIXELS = -100f;
     private float timeSinceLastSafePositionUpdate = 0f;
     private static final float SAFE_POSITION_UPDATE_INTERVAL = 0.25f;
 
-    private float maxHealth = 100f;
+    final float maxHealth = 100f;
     private float currentHealth;
     private boolean isDead = false;
 
-    private Vector2 spawnPointMeters;
-    private WorldContactListener contactListener;
+    final Vector2 spawnPointMeters;
+    final WorldContactListener contactListener;
 
     // KNOCKBACK FORCE
     public static final float KNOCKBACK_HORIZONTAL_BASE_FORCE = 0.2f;
@@ -64,8 +64,6 @@ public class Player {
                   Vector2 spawnPointPixels,
                   Texture idleSheet,
                   Texture runSheet,
-                  Texture jumpSheet,
-                  Texture fallSheet,
                   GameScreen gameScreenRef) {
 
         this.gameScreen = gameScreenRef;
@@ -75,7 +73,7 @@ public class Player {
         this.currentHealth = maxHealth;
         this.lastSafePositionMeters = new Vector2(spawnPointMeters);
 
-        loadAnimations(idleSheet, runSheet, jumpSheet, fallSheet);
+        loadAnimations(idleSheet, runSheet);
         createBody();
 
         currentState = State.IDLE;
@@ -83,7 +81,7 @@ public class Player {
         stateTime = 0f;
     }
 
-    private void loadAnimations(Texture idleSheet, Texture runSheet, Texture jumpSheet, Texture fallSheet) {
+    private void loadAnimations(Texture idleSheet, Texture runSheet) {
 
         //idle anim
         int idleFrameCount = 8;
@@ -137,7 +135,7 @@ public class Player {
         body.setUserData(this);
     }
 
-    public void handleInput(float dt) {
+    public void handleInput() {
         if (isDead || body == null) return;
         if (invulnerabilityTimer > 0 && (Math.abs(body.getLinearVelocity().x) > 0.5f || Math.abs(body.getLinearVelocity().y) > 0.5f) ) {
              return;
@@ -174,12 +172,9 @@ public class Player {
         timeSinceLastSafePositionUpdate += dt;
         if (contactListener.isPlayerOnGround() && timeSinceLastSafePositionUpdate >= SAFE_POSITION_UPDATE_INTERVAL) {
             if (body.getLinearVelocity().y > -0.1f && body.getLinearVelocity().y < 0.1f) {
-                boolean isOnStableGround = true;
+                lastSafePositionMeters.set(body.getPosition());
+                timeSinceLastSafePositionUpdate = 0f;
 
-                if (isOnStableGround) {
-                    lastSafePositionMeters.set(body.getPosition());
-                    timeSinceLastSafePositionUpdate = 0f;
-                }
             }
         }
 
@@ -204,8 +199,6 @@ public class Player {
 
         if (currentState == previousState) {
             stateTime += dt;
-        } else if (currentState != previousState){
-            stateTime = 0;
         } else if (currentState == State.DEAD) {
             stateTime += dt;
         }
@@ -277,13 +270,10 @@ public class Player {
 
         flipCurrentFrame(currentFrame);
 
-        float drawWidth = VISUAL_PLAYER_WIDTH;
-        float drawHeight = VISUAL_PLAYER_HEIGHT;
-
         float playerDrawX = body.getPosition().x * PPM - FRAME_WIDTH / 2f;
         float playerDrawY = body.getPosition().y * PPM - FRAME_HEIGHT / 2f;
 
-        batch.draw(currentFrame, playerDrawX, playerDrawY, drawWidth, drawHeight);
+        batch.draw(currentFrame, playerDrawX, playerDrawY, VISUAL_PLAYER_WIDTH, VISUAL_PLAYER_HEIGHT);
     }
 
     private TextureRegion getFrameToRender() {

@@ -7,8 +7,8 @@ import com.badlogic.gdx.physics.box2d.*;
 
 public class Projectile {
     public Body body;
-    private Texture texture;
-    private float width, height;
+    final Texture texture;
+    final float width, height;
     private boolean scheduledForRemoval = false;
     private float lifeTime = 1f;
 

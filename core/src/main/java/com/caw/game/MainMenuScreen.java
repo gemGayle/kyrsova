@@ -13,7 +13,7 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
 public class MainMenuScreen implements Screen {
     private final GameStart game;
-    private Stage stage;
+    final Stage stage;
     private Skin skin;
     private Slider volumeSlider;
 

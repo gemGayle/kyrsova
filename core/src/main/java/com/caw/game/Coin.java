@@ -9,7 +9,7 @@ import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.utils.Array;
 
 public class Coin {
-    private Body body;
+    final Body body;
     private Animation<TextureRegion> spinAnimation;
     private float stateTime;
 
@@ -75,6 +75,4 @@ public class Coin {
         return scheduledForRemoval;
     }
 
-    public void dispose() {
-    }
 }

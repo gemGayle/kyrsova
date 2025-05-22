@@ -18,17 +18,17 @@ public class Enemy {
     public static final int SPRITESHEET_FRAME_HEIGHT = 20;
     private boolean movingRight = true;
 
-    private float speed = 1.0f;
+    final float speed = 1.0f;
 
-    private float patrolCenterX_meters;
-    private float patrolHalfDistanceMeters;
+    final float patrolCenterX_meters;
+    final float patrolHalfDistanceMeters;
 
     private boolean isStomped = false;
     private boolean scheduledForRemoval = false;
-    private GameScreen gameScreen;
+    final GameScreen gameScreen;
 
-    private float visualWidthPixels;
-    private float visualHeightPixels;
+    final float visualWidthPixels;
+    final float visualHeightPixels;
 
     public Enemy(Body body, Texture patrolSheet, float initialX_pixels, float patrolDistance_pixels,
                  float visualWidth_pixels, float visualHeight_pixels, GameScreen gameScreen) {
@@ -184,6 +184,4 @@ public class Enemy {
         return visualHeightPixels;
     }
 
-    public void dispose() {
-    }
 }

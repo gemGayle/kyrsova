@@ -37,8 +37,8 @@ public class GameScreen implements Screen {
     //camera
     public static final float WORLD_WIDTH_PIXELS = 320f;
     public static final float WORLD_HEIGHT_PIXELS = 240f;
-    private OrthographicCamera gameCamera;
-    private OrthographicCamera hudCamera;
+    final OrthographicCamera gameCamera;
+    final OrthographicCamera hudCamera;
     private OrthographicCamera debugCamera;
     private com.badlogic.gdx.utils.viewport.Viewport gameViewport;
     private com.badlogic.gdx.utils.viewport.Viewport hudViewport;
@@ -207,8 +207,6 @@ public class GameScreen implements Screen {
             initialPlayerSpawnPointPixels,
             playerIdleSheetTexture,
             playerRunSheetTexture,
-            playerJumpSheetTexture,
-            playerFallSheetTexture,
             this);
 
         contactListener.setPlayer(player); // player go to contactListener
@@ -276,11 +274,6 @@ public class GameScreen implements Screen {
         }
     }
 
-    private void playSound(Sound sound) {
-        if (sound != null) {
-            sound.play(0.5f);
-        }
-    }
     private void playSound(Sound sound, float relativeVolume) {
         if (sound != null && game != null && game.prefs != null) {
             float masterVolume = game.prefs.getFloat("masterVolume", 0.5f);
@@ -297,7 +290,7 @@ public class GameScreen implements Screen {
     public void playEnemyDeathSound() { playSound(enemyDeathSound, 0.3f); }
     public void playShootSound() { playSound(shootSound, 0.4f); }
     public void playCoinPickupSound() { playSound(coinPickupSound, 0.3f); }
-    public void playKeyPickupSound() { playSound(keyPickupSound); }
+    public void playKeyPickupSound() { playSound(keyPickupSound, 0.3f); }
 
     public void scheduleFixtureToMakeSensor(Fixture fixture) {
         if (fixture != null && !fixturesToMakeSensor.contains(fixture, true)) {
@@ -357,7 +350,7 @@ public class GameScreen implements Screen {
         if (!isPaused) {
             // game logic
             if (player != null && !player.isDead()) {
-                player.handleInput(delta); // player input
+                player.handleInput(); // player input
                 player.update(delta);      // update
             } else if (player != null && player.isDead()) {
                 // "Game Over"
@@ -545,11 +538,6 @@ public class GameScreen implements Screen {
         }
     }
 
-    public void requestPlayerPositionReset() {
-        if (player != null && !player.isDead()) {
-            playerNeedsPositionReset = true;
-        }
-    }
 
     public void collectCoin() {
         score++;
@@ -620,14 +608,6 @@ public class GameScreen implements Screen {
                 enemies.removeValue(enemy, true);
             }
 
-            if (body.getUserData() instanceof ShootingEnemy) {
-                ShootingEnemy sEnemy = (ShootingEnemy) body.getUserData();
-
-            }
-
-            if (body.getUserData() instanceof Projectile) {
-            }
-
             world.destroyBody(body);
         }
         bodiesToRemove.clear();
@@ -677,8 +657,6 @@ public class GameScreen implements Screen {
 
         //key reset
         playerHasKey = false;
-        if (keyBody != null && !keyBody.isActive()) {
-        }
 
         animatedCoins.clear();
         doors.clear();
